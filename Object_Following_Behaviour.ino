@@ -1,6 +1,10 @@
+//buzzer
+#define buzzer 17
+
 //Pin for Motor
 #define PWMA 6
 #define PWMB 9
+
 #define AIN2 7
 #define AIN1 8
 #define STBY 5
@@ -8,37 +12,33 @@
 #define BIN2 11
 
 //Pin for Button
-#define BUTTON_A 4
-#define BUTTON_B 3
+#define BUTTON_A 16
+#define BUTTON_B 15
 
 //pin for Ultrasonic Sensor
 #define frontUS_echo 13
 #define frontUS_trig 12
-#define rightUS_echo 2
-#define rightUS_trig 1
-#define leftUS_echo 0
-#define leftUS_trig 17
 
 //==== Paramater for handling button A debounce ====//
-const int DEBOUNCE_DELAY = 50; // the debounce time; increase if the output flickers
-int lastSteadyState = LOW;       // the previous steady state from the input pin
-int lastFlickerableState = LOW;  // the previous flickerable state from the input pin
-int currentState;                // the current reading from the input pin
-unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
-bool buttonIsPressed = false; //flag for trigger when button is pressed
+const int DEBOUNCE_DELAY = 50;          // the debounce time; increase if the output flickers
+int lastSteadyState = LOW;              // the previous steady state from the input pin
+int lastFlickerableState = LOW;         // the previous flickerable state from the input pin
+int currentState;                       // the current reading from the input pin
+unsigned long lastDebounceTime = 0;     // the last time the output pin was toggled
+bool buttonIsPressed = false;           //flag for trigger when button is pressed
 
 //==== Paramater for handling button B debounce ====//
-const int DEBOUNCE_DELAY_B = 50; // the debounce time; increase if the output flickers
-int lastSteadyState_B = LOW;       // the previous steady state from the input pin
-int lastFlickerableState_B = LOW;  // the previous flickerable state from the input pin
-int currentState_B;                // the current reading from the input pin
+const int DEBOUNCE_DELAY_B = 50;        // the debounce time; increase if the output flickers
+int lastSteadyState_B = LOW;           // the previous steady state from the input pin
+int lastFlickerableState_B = LOW;      // the previous flickerable state from the input pin
+int currentState_B;                    // the current reading from the input pin
 unsigned long lastDebounceTime_B = 0;  // the last time the output pin was toggled
-bool buttonIsPressed_B = false; //flag for trigger when button is pressed
+bool buttonIsPressed_B = false;        //flag for trigger when button is pressed
 
 //=== Parameter for handling motors ===//
-int motorBaseSpeed = 250; //base speed of both motors
-int motorMinSpeed = 30; // minimum motors speed
-int MOTOR_FACTOR = motorBaseSpeed /100; //motor factor to reduce speed
+int motorBaseSpeed = 250;                 //base speed of both motors
+int motorMinSpeed = 30;                   // minimum motors speed
+int MOTOR_FACTOR = motorBaseSpeed /150;   //motor factor to reduce speed
 const int L_MOTOR_FACTOR = 1;
 const int R_MOTOR_FACTOR = 1;
 const int L_MOTOR_THRESHOLD = 80;
@@ -48,14 +48,21 @@ const int R_MOTOR_THRESHOLD = 80;
 long duration_Front, distance_Front;
 long duration_Right, distance_Right;
 long duration_Left, distance_Left;
-unsigned long UScm;
-unsigned long USpm;
-unsigned long USperiod = 30;
+unsigned long UScm; //Ultrasonic Current Millis to keep track of time
+unsigned long USpm; // ultrasonic Previous Millis
+unsigned long USperiod = 30; //period to read ultrasonic data, 30 meaning that we read ultrasonic data each 30 milliseconds
 const long MAX_DISTANCE = 100; //max measuring distance
-const long STOP_DISTANCE = 5; //stop distance before crash
-long DISTANCE_FACTOR = MAX_DISTANCE/100; //distance factor 
+const long STOP_DISTANCE = 7; //stop distance before crash
+long DISTANCE_FACTOR = MAX_DISTANCE/100; //distance factor
+
+//==== Paramater for handling Buzzer Beeep ====//
+int buzzerState = LOW;
+unsigned long BuzzerCM;
+unsigned long BuzzerPM;
+unsigned long BuzzerPeriod = 100;
 
 void setup() {
+  pinMode(buzzer, OUTPUT);
   pinMode(frontUS_echo, INPUT);
   pinMode(frontUS_trig, OUTPUT);
   pinMode(STBY, OUTPUT);
@@ -69,15 +76,22 @@ void setup() {
   pinMode(BUTTON_B, INPUT_PULLUP);
   digitalWrite(STBY, HIGH);
   Serial.begin(9600);
+  digitalWrite(buzzer,HIGH);
+  delay(100);
+  digitalWrite(buzzer,LOW);
+
 }
 
 void loop() {
-  
   US_handler();
   Button_Handler();
-  if (buttonIsPressed == true) Run_Forward(); //toggle to run
-  else if (buttonIsPressed == false) Stop_Motor(); //toggle to stop
-  
+  if (buttonIsPressed == true) {
+    Run_Forward(); //toggle to run
+  }
+  else if (buttonIsPressed == false) {
+    digitalWrite(buzzer, LOW);
+    Stop_Motor(); //toggle to stop
+  }
 }
 
 void Button_Handler(){
@@ -174,44 +188,42 @@ void Stop_Motor(){
 void US_handler(){
   //non-blocking approach code
   UScm = millis();
+  //here we compare the time, if the difference between current time and previous 
+  //time is more than our periode, check ultrasonic data
   if(UScm > USpm + USperiod){
     //trigger pin procedure to emit Ultrsound wave
     digitalWrite(frontUS_trig, LOW);
-    digitalWrite(rightUS_trig, LOW);
-//    digitalWrite(leftUS_trig, LOW);
     delayMicroseconds(2);
     digitalWrite(frontUS_trig, HIGH);
-    digitalWrite(rightUS_trig, HIGH);
-//    digitalWrite(leftUS_trig, HIGH);
     delayMicroseconds(10);
     digitalWrite(frontUS_trig, LOW);
-    digitalWrite(rightUS_trig, LOW);
-//    digitalWrite(leftUS_trig, LOW);
 
     //calculate time and distance based on pulse that came back
     duration_Front = pulseIn(frontUS_echo,HIGH,38000);
     distance_Front = (duration_Front*0.034/2);
-    duration_Right = pulseIn(rightUS_echo,HIGH,38000);
-    distance_Right = (duration_Right*0.034/2);
-    duration_Left = pulseIn(leftUS_echo,HIGH,38000);
-    distance_Left = (duration_Left*0.034/2);
     if (distance_Front > MAX_DISTANCE) distance_Front = MAX_DISTANCE;
-    if (distance_Right > MAX_DISTANCE) distance_Right = MAX_DISTANCE;
-    if (distance_Left > MAX_DISTANCE) distance_Left = MAX_DISTANCE;
   
     //print distance to debug
     Serial.print("Front = ");
     Serial.print(distance_Front);
-    Serial.print(" cm");
-    Serial.print("  |   Right = ");
-    Serial.print(distance_Right);
-    Serial.print(" cm");
-    Serial.print("  |   Left = ");
-    Serial.print(distance_Left);
     Serial.print(" cm");
     Serial.println( );
 
     //update current miilis of US
     USpm = UScm;
   } 
+}
+
+//buzzer beeping function
+void buzzer_beep(){
+  BuzzerCM = millis();
+  if(BuzzerCM > BuzzerPM + BuzzerPeriod){
+    if (buzzerState == LOW)
+      buzzerState = HIGH;
+    else
+      buzzerState = LOW;
+    
+    BuzzerPM = BuzzerCM;
+    digitalWrite(buzzer, buzzerState);
+  }
 }
